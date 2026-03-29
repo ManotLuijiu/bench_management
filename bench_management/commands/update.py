@@ -216,14 +216,32 @@ def pull_app(bench_path: str, app: str, remote: str, branch: str, dry_run: bool)
     default=False,
     help="Print commands without executing",
 )
+@click.option(
+    "--app",
+    "apps",
+    multiple=True,
+    metavar="APP",
+    help=(
+        "Update only these apps. Use 'core' for all core apps, "
+        "'custom' for all custom apps, or an exact app name. "
+        "Repeatable: --app core --app my_app"
+    ),
+)
 @click.pass_context
-def commands(ctx, skip_build, no_migrate, dry_run):
+def commands(ctx, skip_build, no_migrate, dry_run, apps):
     """
     Update all bench apps — auto-detects reset vs pull per app.
 
     Apps with an 'upstream' remote are reset (core apps).
     Apps with only 'origin' are pulled (custom apps).
     Skip lists live in ~/.bench_management.json (never committed).
+
+    \b
+    Examples:
+      bench selective-update                     # update everything
+      bench selective-update --app core          # core apps only
+      bench selective-update --app custom        # custom apps only
+      bench selective-update --app frappe --app erpnext  # specific apps
     """
     bench_path = _find_bench_path()
     if not bench_path:
@@ -243,6 +261,29 @@ def commands(ctx, skip_build, no_migrate, dry_run):
 
     reset_apps, pull_apps, skip_apps = discover_apps(bench_path, cfg)
 
+    # ── Apply --app filter ────────────────────────────────────────────────────
+    if apps:
+        want_core = "core" in apps
+        want_custom = "custom" in apps
+        named = {a for a in apps if a not in ("core", "custom")}
+
+        if not want_core and not want_custom and not named:
+            _err("No valid --app values provided.")
+            return
+
+        if not want_core:
+            # Keep named apps that happen to be in reset_apps
+            reset_apps = {k: v for k, v in reset_apps.items() if k in named}
+        if not want_custom:
+            # Keep named apps that happen to be in pull_apps
+            pull_apps = {k: v for k, v in pull_apps.items() if k in named}
+
+        # Warn about names not found in either group
+        all_known = set(reset_apps) | set(pull_apps) | set(skip_apps)
+        for name in named:
+            if name not in all_known:
+                _warn(f"--app {name!r} not found in any group — skipping")
+
     # ── Skipped ───────────────────────────────────────────────────────────────
     if skip_apps:
         _header("Skipping")
@@ -250,16 +291,18 @@ def commands(ctx, skip_build, no_migrate, dry_run):
             _warn(f"{app}: {reason}")
 
     # ── Core apps — reset ─────────────────────────────────────────────────────
-    _header(f"Core apps  {DIM}(git fetch + reset --hard){RESET}")
-    for app, (remote, branch) in reset_apps.items():
-        if not reset_app(bench_path, app, remote, branch, dry_run):
-            failed.append(app)
+    if reset_apps:
+        _header(f"Core apps  {DIM}(git fetch + reset --hard){RESET}")
+        for app, (remote, branch) in reset_apps.items():
+            if not reset_app(bench_path, app, remote, branch, dry_run):
+                failed.append(app)
 
     # ── Custom apps — pull ────────────────────────────────────────────────────
-    _header(f"Custom apps  {DIM}(git pull){RESET}")
-    for app, (remote, branch) in pull_apps.items():
-        if not pull_app(bench_path, app, remote, branch, dry_run):
-            failed.append(app)
+    if pull_apps:
+        _header(f"Custom apps  {DIM}(git pull){RESET}")
+        for app, (remote, branch) in pull_apps.items():
+            if not pull_app(bench_path, app, remote, branch, dry_run):
+                failed.append(app)
 
     # ── bench migrate ─────────────────────────────────────────────────────────
     if not no_migrate:
