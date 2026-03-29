@@ -227,8 +227,14 @@ def pull_app(bench_path: str, app: str, remote: str, branch: str, dry_run: bool)
         "Repeatable: --app core --app my_app"
     ),
 )
+@click.option(
+    "--code-only",
+    is_flag=True,
+    default=False,
+    help="Pull/reset code only — skip migrate, build, and restart",
+)
 @click.pass_context
-def commands(ctx, skip_build, no_migrate, dry_run, apps):
+def commands(ctx, skip_build, no_migrate, dry_run, apps, code_only):
     """
     Update all bench apps — auto-detects reset vs pull per app.
 
@@ -238,11 +244,16 @@ def commands(ctx, skip_build, no_migrate, dry_run, apps):
 
     \b
     Examples:
-      bench selective-update                     # update everything
-      bench selective-update --app core          # core apps only
-      bench selective-update --app custom        # custom apps only
+      bench selective-update                          # update everything
+      bench selective-update --app core               # core apps only
+      bench selective-update --app custom             # custom apps only
       bench selective-update --app frappe --app erpnext  # specific apps
+      bench selective-update --app core --code-only   # code only, no migrate/build
     """
+    if code_only:
+        no_migrate = True
+        skip_build = True
+
     bench_path = _find_bench_path()
     if not bench_path:
         _err("Not inside a bench directory.")
@@ -252,10 +263,16 @@ def commands(ctx, skip_build, no_migrate, dry_run, apps):
     start = time.time()
     failed = []
 
+    suffix = []
+    if dry_run:
+        suffix.append("dry-run")
+    if code_only:
+        suffix.append("code-only")
+
     click.echo(f"\n{BOLD}{'─' * 55}{RESET}")
     click.echo(
         f"{BOLD}  bench selective-update{RESET}"
-        + (f"  {DIM}(dry-run){RESET}" if dry_run else "")
+        + (f"  {DIM}({', '.join(suffix)}){RESET}" if suffix else "")
     )
     click.echo(f"{BOLD}{'─' * 55}{RESET}")
 
@@ -325,12 +342,13 @@ def commands(ctx, skip_build, no_migrate, dry_run, apps):
             failed.append("bench build")
 
     # ── bench restart ─────────────────────────────────────────────────────────
-    _header("bench restart")
-    ok, out = _run("bench restart", bench_path, dry_run)
-    if ok:
-        _ok("restarted")
-    else:
-        _warn(f"restart returned non-zero (may be OK in dev)\n{out}")
+    if not code_only:
+        _header("bench restart")
+        ok, out = _run("bench restart", bench_path, dry_run)
+        if ok:
+            _ok("restarted")
+        else:
+            _warn(f"restart returned non-zero (may be OK in dev)\n{out}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     elapsed = round(time.time() - start, 1)
