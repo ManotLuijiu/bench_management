@@ -100,6 +100,26 @@ def _run(cmd: str, cwd: str, dry_run: bool = False) -> tuple[bool, str]:
     return result.returncode == 0, result.stdout.strip()
 
 
+def _run_stream(cmd: str, cwd: str, dry_run: bool = False) -> bool:
+    """Run a long-running command and stream output line-by-line (no freeze)."""
+    if dry_run:
+        _info(f"[dry-run] {cmd}")
+        return True
+    proc = subprocess.Popen(
+        cmd,
+        shell=True,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    for line in proc.stdout:
+        click.echo(f"    {DIM}{line.rstrip()}{RESET}")
+    proc.wait()
+    return proc.returncode == 0
+
+
 def _git_remotes(app_path: str) -> list[str]:
     ok, out = _run("git remote", app_path)
     return out.splitlines() if ok else []
@@ -324,21 +344,19 @@ def commands(ctx, skip_build, no_migrate, dry_run, apps, code_only):
     # ── bench migrate ─────────────────────────────────────────────────────────
     if not no_migrate:
         _header("bench migrate")
-        ok, out = _run("bench --site all migrate", bench_path, dry_run)
-        if ok:
+        if _run_stream("bench --site all migrate", bench_path, dry_run):
             _ok("migrate complete")
         else:
-            _err(f"migrate failed\n{out}")
+            _err("migrate failed")
             failed.append("bench migrate")
 
     # ── bench build ───────────────────────────────────────────────────────────
     if not skip_build:
         _header("bench build")
-        ok, out = _run("bench build --app frappe", bench_path, dry_run)
-        if ok:
+        if _run_stream("bench build --app frappe", bench_path, dry_run):
             _ok("build complete")
         else:
-            _err(f"build failed\n{out}")
+            _err("build failed")
             failed.append("bench build")
 
     # ── bench restart ─────────────────────────────────────────────────────────
