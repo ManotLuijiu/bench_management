@@ -194,9 +194,10 @@ def reset_app(bench_path: str, app: str, remote: str, branch: str, dry_run: bool
 
 def pull_app(bench_path: str, app: str, remote: str, branch: str, dry_run: bool) -> bool:
     path = os.path.join(bench_path, "apps", app)
-    ok, out = _run(f"git pull {remote} {branch}", path, dry_run)
+    # --rebase keeps local commits on top of upstream, avoids divergent-branch errors
+    ok, out = _run(f"git pull --rebase {remote} {branch}", path, dry_run)
     if not ok:
-        _err(f"{app}: git pull failed\n    {out}")
+        _err(f"{app}: git pull --rebase failed\n    {out}")
         return False
     head = _git_head(path)
     _ok(f"{app}  {DIM}[{head}]{RESET}")
@@ -263,7 +264,7 @@ def commands(ctx, skip_build, no_migrate, dry_run):
     # ── bench migrate ─────────────────────────────────────────────────────────
     if not no_migrate:
         _header("bench migrate")
-        ok, out = _run("bench migrate", bench_path, dry_run)
+        ok, out = _run("bench --site all migrate", bench_path, dry_run)
         if ok:
             _ok("migrate complete")
         else:
