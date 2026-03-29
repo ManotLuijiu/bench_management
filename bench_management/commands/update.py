@@ -253,8 +253,18 @@ def pull_app(bench_path: str, app: str, remote: str, branch: str, dry_run: bool)
     default=False,
     help="Pull/reset code only — skip migrate, build, and restart",
 )
+@click.option(
+    "--skip-app",
+    "skip_apps_cli",
+    multiple=True,
+    metavar="APP",
+    help=(
+        "Skip this app for this run (without editing ~/.bench_management.json). "
+        "Repeatable: --skip-app erpnext_inpac --skip-app my_frozen_app"
+    ),
+)
 @click.pass_context
-def commands(ctx, skip_build, no_migrate, dry_run, apps, code_only):
+def commands(ctx, skip_build, no_migrate, dry_run, apps, code_only, skip_apps_cli):
     """
     Update all bench apps — auto-detects reset vs pull per app.
 
@@ -264,11 +274,12 @@ def commands(ctx, skip_build, no_migrate, dry_run, apps, code_only):
 
     \b
     Examples:
-      bench selective-update                          # update everything
-      bench selective-update --app core               # core apps only
-      bench selective-update --app custom             # custom apps only
-      bench selective-update --app frappe --app erpnext  # specific apps
-      bench selective-update --app core --code-only   # code only, no migrate/build
+      bench selective-update                               # update everything
+      bench selective-update --app core                    # core apps only
+      bench selective-update --app custom                  # custom apps only
+      bench selective-update --app frappe --app erpnext    # specific apps
+      bench selective-update --app core --code-only        # code only, no migrate/build
+      bench selective-update --skip-app erpnext_inpac      # skip one app this run
     """
     if code_only:
         no_migrate = True
@@ -297,6 +308,17 @@ def commands(ctx, skip_build, no_migrate, dry_run, apps, code_only):
     click.echo(f"{BOLD}{'─' * 55}{RESET}")
 
     reset_apps, pull_apps, skip_apps = discover_apps(bench_path, cfg)
+
+    # ── Apply --skip-app (CLI, this run only) ─────────────────────────────────
+    for app in skip_apps_cli:
+        if app in reset_apps:
+            reset_apps.pop(app)
+            skip_apps[app] = "skipped via --skip-app"
+        elif app in pull_apps:
+            pull_apps.pop(app)
+            skip_apps[app] = "skipped via --skip-app"
+        else:
+            _warn(f"--skip-app {app!r} not found in any group")
 
     # ── Apply --app filter ────────────────────────────────────────────────────
     if apps:
