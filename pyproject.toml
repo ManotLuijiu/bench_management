@@ -3,7 +3,7 @@ name = "bench_management"
 authors = [
     { name = "MooCoding", email = "moocoding@gmail.com"}
 ]
-description = "Using as alias of bench update --reset or `bench update --reset --exclude-app [app_name_1] [app_name_2]"
+description = "Using as alias of bench update --reset or `bench update --reset --exclude-app [app_name_1] [app_name_2]`"
 requires-python = ">=3.14"
 readme = "README.md"
 dynamic = ["version"]

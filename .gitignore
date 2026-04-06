@@ -56,3 +56,6 @@ jspm_packages/
 
 # bench_management per-server config — never commit this
 .bench_management.json
+
+bench_management/locale/
+bench_management/translations/
